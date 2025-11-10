@@ -472,46 +472,88 @@ custom_css = """
     height: 500px;
 }
 
+/* Status box styling with dark background */
 #status_box {
-    border-left: 4px solid #2196F3;
-    padding: 15px;
-    background-color: #f5f5f5;
-    border-radius: 5px;
+    border-left: 4px solid #2196F3 !important;
+    padding: 15px !important;
+    background-color: #1e3a5f !important;
+    border-radius: 5px !important;
+    color: #e3f2fd !important;
 }
 
+#status_box * {
+    color: #e3f2fd !important;
+    background-color: transparent !important;
+}
+
+/* Error notification styling */
 #error_notification {
-    padding: 12px 16px;
-    margin-bottom: 15px;
-    border-radius: 8px;
-    font-size: 14px;
-    line-height: 1.5;
-    background-color: #fee;
-    border-left: 4px solid #f44336;
-    color: #c62828;
-    display: block;
+    padding: 12px 16px !important;
+    margin-bottom: 15px !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    background-color: #ffebee !important;
+    border-left: 4px solid #f44336 !important;
+    color: #c62828 !important;
+    display: block !important;
 }
 
 #error_notification:empty {
-    display: none;
-    padding: 0;
-    margin: 0;
+    display: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
+#error_notification * {
+    color: #c62828 !important;
+    background-color: transparent !important;
+}
+
+/* Model indicator styling */
 #model_indicator {
-    padding: 10px 16px;
-    margin-bottom: 15px;
-    border-radius: 8px;
-    font-size: 14px;
-    background-color: #e3f2fd;
-    border-left: 4px solid #2196f3;
-    color: #0d47a1;
-    font-weight: 500;
+    padding: 10px 16px !important;
+    margin-bottom: 15px !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    background-color: #1a237e !important;
+    border-left: 4px solid #2196f3 !important;
+    color: #bbdefb !important;
+    font-weight: 500 !important;
 }
 
 #model_indicator:empty {
-    display: none;
-    padding: 0;
-    margin: 0;
+    display: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+#model_indicator * {
+    color: #bbdefb !important;
+    background-color: transparent !important;
+}
+
+/* Lifelines status styling */
+#lifelines_status {
+    padding: 10px 16px !important;
+    margin-bottom: 15px !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    background-color: #4a2c2a !important;
+    border-left: 4px solid #ff9800 !important;
+    color: #ffe0b2 !important;
+    font-weight: 500 !important;
+}
+
+#lifelines_status:empty {
+    display: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+#lifelines_status * {
+    color: #ffe0b2 !important;
+    background-color: transparent !important;
 }
 
 .header {
@@ -522,19 +564,38 @@ custom_css = """
     border-radius: 10px;
     margin-bottom: 20px;
 }
+
+/* Completely hide all pending/loading states from status components */
+#status_box .pending,
+#model_indicator .pending,
+#lifelines_status .pending,
+#error_notification .pending,
+#status_box .wrap.pending,
+#model_indicator .wrap.pending,
+#lifelines_status .wrap.pending,
+#error_notification .wrap.pending {
+    display: none !important;
+}
 """
 
 # Build the Gradio interface
 def create_interface():
     """Create and configure the Gradio interface."""
     
-    with gr.Blocks(css=custom_css, theme=gr.themes.Soft(), title="Examiner AI") as demo:
+    with gr.Blocks(
+        css=custom_css, 
+        theme=gr.themes.Soft(), 
+        title="Examiner AI",
+        head="""
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='grad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' style='stop-color:%23667eea;stop-opacity:1' /><stop offset='100%25' style='stop-color:%23764ba2;stop-opacity:1' /></linearGradient></defs><circle cx='50' cy='50' r='48' fill='url(%23grad)'/><g transform='translate(50, 50)'><polygon points='-25,-10 25,-10 30,-5 -30,-5' fill='%23ffffff'/><rect x='-15' y='-5' width='30' height='8' fill='%23ffffff'/><line x1='25' y1='-10' x2='30' y2='-20' stroke='%23ffd700' stroke-width='2'/><circle cx='30' cy='-22' r='3' fill='%23ffd700'/><rect x='-12' y='5' width='24' height='18' rx='2' fill='%23ffffff'/><line x1='-8' y1='10' x2='8' y2='10' stroke='%23667eea' stroke-width='2'/><line x1='-8' y1='14' x2='8' y2='14' stroke='%23667eea' stroke-width='2'/><line x1='-8' y1='18' x2='5' y2='18' stroke='%23667eea' stroke-width='2'/></g></svg>">
+        """
+    ) as demo:
         
         # Header
         gr.HTML("""
             <div class="header">
                 <h1>🎓 Examiner AI</h1>
-                <p>Upload your document and answer intelligent questions from an AI examiner</p>
+                <p>Upload your document and answer questions from your AI examiner</p>
             </div>
         """)
         
@@ -605,7 +666,7 @@ def create_interface():
                 lifelines_status = gr.Markdown(
                     "",
                     visible=True,
-                    elem_id="model_indicator"
+                    elem_id="lifelines_status"
                 )
                 
                 # Error notification area
@@ -645,6 +706,7 @@ def create_interface():
         <div style="text-align: center; color: #666;">
             <p>Powered by Google Gemini AI | Built with Gradio</p>
             <p>⚡ Provide meaningful answers to receive constructive feedback</p>
+            <p>Developed by <a href="https://github.com/yousuf-git" target="_blank" style="color: #2196F3; text-decoration: none; font-weight: 500;">M. Yousuf</a></p>
         </div>
         """)
         
@@ -661,37 +723,44 @@ def create_interface():
                 return None, error
             return file_path, ""
         
+        # Process PDF - only update outputs that change, keeping others static
         process_btn.click(
             fn=process_and_update,
             inputs=[pdf_input, num_questions],
-            outputs=[status_output, chatbot, error_notification, model_indicator, lifelines_status]
+            outputs=[status_output, chatbot, error_notification, model_indicator, lifelines_status],
+            show_progress="minimal"
         )
         
         export_btn.click(
             fn=export_and_download,
-            outputs=[report_file, error_notification]
+            outputs=[report_file, error_notification],
+            show_progress="minimal"
         ).then(
             fn=lambda: gr.File(visible=True),
             outputs=[report_file]
         )
         
-        # Lifeline buttons
+        # Lifeline buttons - show loading only in chatbot
         rephrase_btn.click(
             fn=lambda h: use_lifeline("rephrase", h),
             inputs=[chatbot],
-            outputs=[chatbot, error_notification, model_indicator, lifelines_status]
+            outputs=[chatbot, error_notification, model_indicator, lifelines_status],
+            show_progress="minimal"
         )
         
         new_question_btn.click(
             fn=lambda h: use_lifeline("new", h),
             inputs=[chatbot],
-            outputs=[chatbot, error_notification, model_indicator, lifelines_status]
+            outputs=[chatbot, error_notification, model_indicator, lifelines_status],
+            show_progress="minimal"
         )
         
+        # Submit answer - immediate user message, then loading in chatbot only
         msg_input.submit(
             fn=chat_with_examiner,
             inputs=[msg_input, chatbot],
-            outputs=[chatbot, msg_input, error_notification, model_indicator, lifelines_status, retry_btn]
+            outputs=[chatbot, msg_input, error_notification, model_indicator, lifelines_status, retry_btn],
+            show_progress="minimal"
         ).then(
             fn=lambda show_retry: gr.Button(visible=show_retry),
             inputs=[retry_btn],
@@ -701,7 +770,8 @@ def create_interface():
         submit_btn.click(
             fn=chat_with_examiner,
             inputs=[msg_input, chatbot],
-            outputs=[chatbot, msg_input, error_notification, model_indicator, lifelines_status, retry_btn]
+            outputs=[chatbot, msg_input, error_notification, model_indicator, lifelines_status, retry_btn],
+            show_progress="minimal"
         ).then(
             fn=lambda show_retry: gr.Button(visible=show_retry),
             inputs=[retry_btn],
@@ -711,7 +781,8 @@ def create_interface():
         retry_btn.click(
             fn=retry_last_action,
             inputs=[msg_input, chatbot],
-            outputs=[chatbot, msg_input, error_notification, model_indicator, lifelines_status, retry_btn]
+            outputs=[chatbot, msg_input, error_notification, model_indicator, lifelines_status, retry_btn],
+            show_progress="minimal"
         ).then(
             fn=lambda show_retry: gr.Button(visible=show_retry),
             inputs=[retry_btn],
@@ -720,7 +791,8 @@ def create_interface():
         
         reset_btn.click(
             fn=reset_session,
-            outputs=[status_output, chatbot, msg_input, error_notification, model_indicator, lifelines_status, retry_btn]
+            outputs=[status_output, chatbot, msg_input, error_notification, model_indicator, lifelines_status, retry_btn],
+            show_progress="minimal"
         ).then(
             fn=lambda show_retry: gr.Button(visible=show_retry),
             inputs=[retry_btn],
