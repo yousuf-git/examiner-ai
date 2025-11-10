@@ -184,6 +184,24 @@ Delete on termination: Yes (or No to preserve data)
 
 ### Step 4: Allocate Elastic IP (Static IP)
 
+**Why do we need Elastic IP?**
+
+When you create an EC2 instance, AWS assigns a **public IP automatically**, BUT this IP **changes every time** you stop/start the instance. This breaks your domain configuration and causes downtime.
+
+**Comparison:**
+
+| Feature | Regular Public IP | Elastic IP |
+|---------|------------------|------------|
+| **Permanence** | ❌ Changes on stop/start | ✅ Never changes |
+| **Domain Stability** | ❌ Must update DNS | ✅ Set once, works forever |
+| **Cost (Running)** | Free | Free |
+| **Cost (Stopped)** | IP Lost | $0.005/hr (~$3.60/month) |
+| **Use Case** | Testing only | Production ✅ |
+
+**For production with custom domain, Elastic IP is REQUIRED.**
+
+**Steps:**
+
 1. In EC2 Dashboard → **Elastic IPs** (left menu)
 2. Click **Allocate Elastic IP address**
 3. Network Border Group: Default
@@ -957,7 +975,51 @@ sudo systemctl restart examiner-ai
 # Consider upgrading to larger instance if consistently high
 ```
 
-### Issue 5: Can't Connect via SSH
+### Issue 5: ImportError with HuggingFace Hub
+
+**Error:** `ImportError: cannot import name 'HfFolder' from 'huggingface_hub'`
+
+**Cause:** Version incompatibility between Gradio 4.19.2 and newer HuggingFace Hub
+
+**Solution:**
+
+```bash
+# Activate virtual environment
+cd ~/examiner-ai
+source venv/bin/activate
+
+# Downgrade to compatible version
+pip install huggingface_hub==0.19.4
+
+# Restart application
+sudo systemctl restart examiner-ai
+
+# Verify
+sudo systemctl status examiner-ai
+```
+
+### Issue 6: "gradio is not installed" with python3
+
+**Cause:** Using system Python instead of venv Python
+
+**Solution:**
+
+```bash
+# Always activate venv first
+cd ~/examiner-ai
+source venv/bin/activate
+
+# Use python3.11 (not python3)
+python3.11 app.py
+
+# Or use systemd service (recommended)
+sudo systemctl start examiner-ai
+```
+
+### Issue 7: Can't Connect via SSH
+
+```bash
+### Issue 7: Can't Connect via SSH
 
 ```bash
 # From AWS Console:
@@ -968,6 +1030,9 @@ sudo systemctl restart examiner-ai
 # Verify security group allows SSH from your IP
 # Verify key file permissions: chmod 400 examiner-ai-key.pem
 # Try EC2 Instance Connect from AWS Console
+```
+
+### Issue 8: Domain Not Resolving
 ```
 
 ### Issue 6: Domain Not Resolving
