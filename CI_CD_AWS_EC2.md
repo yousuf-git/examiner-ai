@@ -212,30 +212,36 @@ NC='\033[0m' # No Color
 APP_DIR="/home/ubuntu/examiner-ai"
 BACKUP_DIR="/home/ubuntu/deployments/releases"
 SERVICE_NAME="examiner-ai"
-LOG_FILE="/var/log/examiner-ai/deploy.log"
+LOG_DIR="/home/ubuntu/deployments/shared/logs"
+LOG_FILE="${LOG_DIR}/deploy.log"
 
 # Create timestamp
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RELEASE_DIR="${BACKUP_DIR}/${TIMESTAMP}"
+
+# Ensure log directory exists
+mkdir -p "${LOG_DIR}"
 
 echo -e "${YELLOW}Starting deployment at ${TIMESTAMP}${NC}"
 
 # Function to log
 log() {
     echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> $LOG_FILE
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE" 2>/dev/null || echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
 }
 
 # Function to handle errors
 error_exit() {
     echo -e "${RED}ERROR: $1${NC}"
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1" >> $LOG_FILE
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1" >> "$LOG_FILE" 2>/dev/null || echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1"
     exit 1
 }
 
 # Create backup of current version
 log "Creating backup of current version..."
-mkdir -p "${RELEASE_DIR}"
+if ! mkdir -p "${RELEASE_DIR}"; then
+    error_exit "Failed to create release directory. Check permissions."
+fi
 cp -r "${APP_DIR}" "${RELEASE_DIR}/" || error_exit "Failed to create backup"
 
 # Navigate to application directory
@@ -336,8 +342,24 @@ NC='\033[0m'
 APP_DIR="/home/ubuntu/examiner-ai"
 BACKUP_DIR="/home/ubuntu/deployments/releases"
 SERVICE_NAME="examiner-ai"
+LOG_DIR="/home/ubuntu/deployments/shared/logs"
+LOG_FILE="${LOG_DIR}/rollback.log"
+
+# Ensure directories exist
+mkdir -p "${BACKUP_DIR}" "${LOG_DIR}"
+
+# Function to log
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE" 2>/dev/null || true
+}
 
 echo -e "${YELLOW}Available releases:${NC}"
+if [ -z "$(ls -A "${BACKUP_DIR}" 2>/dev/null)" ]; then
+    echo -e "${RED}No releases found in ${BACKUP_DIR}${NC}"
+    exit 1
+fi
+
 ls -lt "${BACKUP_DIR}" | grep '^d' | awk '{print NR") "$9}'
 
 echo ""
@@ -356,28 +378,59 @@ fi
 
 RELEASE_PATH="${BACKUP_DIR}/${RELEASE}/examiner-ai"
 
-echo -e "${YELLOW}Rolling back to: ${RELEASE}${NC}"
+if [ ! -d "$RELEASE_PATH" ]; then
+    echo -e "${RED}Release path not found: ${RELEASE_PATH}${NC}"
+    exit 1
+fi
+
+log "Rolling back to: ${RELEASE}"
 
 # Backup current state
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-mkdir -p "${BACKUP_DIR}/rollback_${TIMESTAMP}"
-cp -r "${APP_DIR}" "${BACKUP_DIR}/rollback_${TIMESTAMP}/"
+ROLLBACK_BACKUP="${BACKUP_DIR}/rollback_${TIMESTAMP}"
+
+log "Creating backup of current state..."
+if ! mkdir -p "${ROLLBACK_BACKUP}"; then
+    echo -e "${RED}Failed to create rollback backup directory${NC}"
+    exit 1
+fi
+
+cp -r "${APP_DIR}" "${ROLLBACK_BACKUP}/" || {
+    echo -e "${RED}Failed to backup current state${NC}"
+    exit 1
+}
 
 # Restore from backup
-echo "Restoring files..."
-rm -rf "${APP_DIR}"
-cp -r "${RELEASE_PATH}" "${APP_DIR}"
+log "Restoring files from backup..."
+rm -rf "${APP_DIR}" || {
+    echo -e "${RED}Failed to remove current application directory${NC}"
+    exit 1
+}
+
+cp -r "${RELEASE_PATH}" "${APP_DIR}" || {
+    echo -e "${RED}Failed to restore from backup${NC}"
+    exit 1
+}
 
 # Restart service
-echo "Restarting service..."
-sudo systemctl restart ${SERVICE_NAME}
+log "Restarting service..."
+if ! sudo systemctl restart ${SERVICE_NAME}; then
+    echo -e "${RED}Failed to restart service${NC}"
+    exit 1
+fi
 
 # Check status
+log "Verifying service status..."
 sleep 3
 if sudo systemctl is-active --quiet ${SERVICE_NAME}; then
+    echo -e "${GREEN}========================================${NC}"
     echo -e "${GREEN}Rollback completed successfully!${NC}"
+    echo -e "${GREEN}Restored to: ${RELEASE}${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    log "Rollback completed successfully to ${RELEASE}"
 else
     echo -e "${RED}Service failed to start after rollback${NC}"
+    log "ERROR: Service failed to start after rollback"
     exit 1
 fi
 ```
@@ -744,10 +797,10 @@ ssh -i examiner-ai-key.pem ubuntu@YOUR_EC2_IP
 sudo systemctl status examiner-ai
 
 # View deployment logs
-tail -f /var/log/examiner-ai/deploy.log
+tail -f ~/deployments/shared/logs/deploy.log
 
 # Check application logs
-sudo tail -f /var/log/examiner-ai/output.log
+sudo journalctl -u examiner-ai -f
 
 # Test application
 curl http://localhost/health
@@ -953,7 +1006,7 @@ sudo systemctl status nginx
 sudo nginx -t
 
 # Check application logs
-tail -f /var/log/examiner-ai/output.log
+sudo journalctl -u examiner-ai -f
 ```
 
 ### Issue 6: Git Pull Failed
@@ -1131,7 +1184,10 @@ ssh -i examiner-ai-key.pem ubuntu@YOUR_EC2_IP
 sudo systemctl status examiner-ai
 
 # View deployment logs
-tail -f /var/log/examiner-ai/deploy.log
+tail -f ~/deployments/shared/logs/deploy.log
+
+# View rollback logs
+tail -f ~/deployments/shared/logs/rollback.log
 
 # Manual rollback
 ./rollback.sh

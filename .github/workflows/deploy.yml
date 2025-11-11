@@ -118,7 +118,7 @@ jobs:
             
             # Run deployment script
             cd ~
-            ./deploy.sh
+            sudo ./deploy.sh
             
             echo "✅ Deployment completed!"
           ENDSSH
