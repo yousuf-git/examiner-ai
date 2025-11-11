@@ -225,8 +225,6 @@ def use_lifeline(lifeline_type: str, history: List) -> Tuple[List, str, str, str
     Returns:
         Tuple[List, str, str, str]: (Updated history, error, model info, lifelines status)
     """
-    global session_active
-    
     if not session_active:
         return history, "⚠️ Please start an examination first.", "", ""
     
