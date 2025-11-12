@@ -111,17 +111,32 @@ def process_pdf(pdf_file, num_questions: int) -> Tuple[str, str, str, str, str]:
         
         lifelines_status = f"🎯 **Lifelines Available:** {lifelines_remaining}/{lifelines_total}"
         
+        # Get document type and format it nicely
+        doc_type = examiner.state.document_type
+        doc_type_display = doc_type.replace('_', ' ').title()
+        
+        # Extract just the summary text (remove Type prefix if present)
+        import re
+        summary_match = re.search(r'\*\*Summary:\*\*\s*(.+?)(?:\n|$)', analysis, re.DOTALL)
+        if summary_match:
+            clean_summary = summary_match.group(1).strip()
+            # Remove any remaining type mentions
+            clean_summary = re.sub(r'\*\*Type:\*\*[^\n]+\n?', '', clean_summary).strip()
+        else:
+            clean_summary = analysis
+        
         status_msg = f"""✅ **PDF Processed Successfully!**
         
 📄 **Document Info:**
 - Title: {document_title}
+- Type: {doc_type_display}
 - Pages: {summary.get('pages', 'N/A')}
 - Words: {summary.get('word_count', 'N/A')}
 - Total Questions: {num_questions}
 - Lifelines: {lifelines_remaining}/{lifelines_total}
 
-🤖 **AI Analysis:**
-{analysis}
+📋 **Summary:**
+{clean_summary}
 
 ---
 **The examination will now begin. Please answer each question thoughtfully.**

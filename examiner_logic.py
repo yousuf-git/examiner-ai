@@ -30,6 +30,8 @@ class ConversationState:
         total_questions: Total number of questions to ask
         document_analysis: Initial analysis of the document
         document_title: Title of the document
+        document_type: Type of document detected (e.g., 'research', 'proposal', 'thesis', etc.)
+        focus_areas: Dynamic focus areas generated based on document type
         lifelines_total: Total lifelines available
         lifelines_remaining: Remaining lifelines
         lifelines_used: List of (question_index, lifeline_type) tuples
@@ -45,6 +47,8 @@ class ConversationState:
     total_questions: int = 5
     document_analysis: str = ""
     document_title: str = "Unknown Document"
+    document_type: str = "general"
+    focus_areas: List[str] = field(default_factory=list)
     lifelines_total: int = 0
     lifelines_remaining: int = 0
     lifelines_used: List[Tuple[int, str]] = field(default_factory=list)
@@ -213,9 +217,92 @@ Keep responses concise and focused."""
         """
         return (self.state.lifelines_remaining, self.state.lifelines_total)
     
+    def _get_generic_focus_areas(self) -> List[str]:
+        """
+        Get generic focus areas that work for any document type.
+        
+        Returns:
+            List[str]: Generic focus areas
+        """
+        return [
+            "the main topic and central purpose — what is this document about and why does it matter?",
+            "the scope and boundaries — what is included, what is excluded, and what are the limitations?",
+            "the key points, arguments, or findings — what are the main claims, conclusions, or discoveries?",
+            "the evidence, methods, or reasoning — how are conclusions supported and validated?",
+            "the implications, significance, and future directions — what impact does this have and what comes next?"
+        ]
+    
+    def _generate_focus_areas_from_document(self) -> Tuple[List[str], Optional[str]]:
+        """
+        Generate dynamic focus areas based on document type and content.
+        
+        Returns:
+            Tuple[List[str], Optional[str]]: (focus_areas, error_message)
+        """
+        prompt = f"""{self.examiner_personality}
+
+You are preparing examination questions for a student who has READ this document.
+
+Document Type: {self.state.document_type}
+Document Content (excerpt):
+{self.state.document_text[:2500]}...
+
+Generate EXACTLY 5 focus areas that examination questions should cover.
+
+CRITICAL: Focus areas must be about the SUBJECT MATTER/CONTENT, NOT about:
+- Document formatting or structure
+- Author/submitter details
+- Page numbers or layout
+- Metadata or administrative information
+
+Instead, focus on:
+- The main concepts, ideas, or arguments
+- The methodology, approach, or techniques
+- The objectives, goals, or purpose
+- The results, findings, or outcomes
+- The implementation details or design
+
+Examples by document type:
+- Research paper: "the research methodology and experimental design", "the results and their interpretation"
+- Proposal: "the problem being addressed and its significance", "the proposed solution and approach"
+- Tutorial: "the step-by-step implementation process", "the practical applications and use cases"
+- Topic: "the fundamental concepts and definitions", "the real-world examples and applications"
+
+Format as a numbered list:
+1. [Content aspect to examine]
+2. [Content aspect to examine]
+3. [Content aspect to examine]
+4. [Content aspect to examine]
+5. [Content aspect to examine]
+
+Focus on understanding the CONTENT, not analyzing the document structure."""
+
+        response, error = self._generate_with_fallback(prompt)
+        
+        if error or not response:
+            # Fallback to generic areas
+            return self._get_generic_focus_areas(), error
+        
+        # Parse the numbered list
+        import re
+        lines = response.strip().split('\n')
+        focus_areas = []
+        
+        for line in lines:
+            # Match patterns like "1.", "1)", "1 -", etc.
+            match = re.match(r'^\d+[\.\)\-\:]\s*(.+)$', line.strip())
+            if match:
+                focus_areas.append(match.group(1).strip())
+        
+        # If we didn't get 5 areas, use generic ones
+        if len(focus_areas) < 5:
+            return self._get_generic_focus_areas(), None
+        
+        return focus_areas[:5], None  # Take first 5 if more than 5
+    
     def analyze_document(self, document_text: str, document_title: str = "Unknown Document") -> Tuple[str, Optional[str]]:
         """
-        Analyze the uploaded PDF document to understand its content.
+        Analyze the uploaded PDF document to understand its content and determine focus areas.
         
         Args:
             document_text (str): Extracted text from the PDF
@@ -227,22 +314,55 @@ Keep responses concise and focused."""
         self.state.document_text = document_text
         self.state.document_title = document_title
         
+        # First, analyze and classify the document
         prompt = f"""{self.examiner_personality}
 
-Analyze the following document and provide a brief summary focusing on:
-- Main topic/subject
-- Key themes identified
-- Type of document (proposal, research paper, etc.)
-- Areas that would benefit from deeper examination
+You are analyzing a document to prepare for an examination. Identify the document type and provide a brief summary.
 
-Document:
-{document_text[:3000]}...  # Limiting to first 3000 chars for initial analysis
+Document Title: {document_title}
+Document Content:
+{document_text[:3000]}...
 
-Provide a concise 3-4 sentence analysis."""
+Provide ONLY:
+1. Document Type: Choose ONE from (research_paper, thesis, proposal, book_chapter, book, technical_report, essay, case_study, review_article, tutorial, topic, general)
+   - "book" = complete books with multiple chapters
+   - "book_chapter" = single chapter from a book
+   - "topic" = documents explaining a specific concept (e.g., "Types of AI Models")
+   - "general" = if none fit
+
+2. Brief Summary: Write 2-3 concise sentences describing:
+   - What this document is about
+   - The main subject/focus
+   - Key themes covered
+
+Format EXACTLY as:
+**Type:** [document_type]
+**Summary:** [3-4 sentences only]
+
+Keep the summary brief and factual. Do NOT include suggestions for improvement."""
 
         analysis, error = self._generate_with_fallback(prompt)
+        
         if analysis:
             self.state.document_analysis = analysis
+            
+            # Extract document type from analysis
+            import re
+            type_match = re.search(r'\*\*Type:\*\*\s*(\w+)', analysis)
+            if type_match:
+                self.state.document_type = type_match.group(1).lower()
+            else:
+                self.state.document_type = "general"
+            
+            # Generate dynamic focus areas based on document type
+            focus_areas, focus_error = self._generate_focus_areas_from_document()
+            self.state.focus_areas = focus_areas
+            
+            # If focus area generation failed but document analysis succeeded, 
+            # don't return the error (we have fallback areas)
+            if not error:
+                error = None
+        
         return analysis, error
     
     def generate_next_question(self) -> Tuple[Optional[str], Optional[str]]:
@@ -259,16 +379,14 @@ Provide a concise 3-4 sentence analysis."""
         if self.state.awaiting_lifeline_response and self.state.last_lifeline_type:
             return self._handle_lifeline_question()
         
-        # Define focus areas for questions
-        focus_areas = [
-            "the problem statement and motivation - what problem does this address and why is it important?",
-            "the scope and boundaries of the project - what is included and what is explicitly out of scope?",
-            "the objectives and expected outcomes - what specific goals are being pursued?",
-            "the methodology and approach - how will the objectives be achieved?",
-            "the innovation, feasibility, and potential impact - what makes this unique and realistic?"
-        ]
+        # Use dynamically generated focus areas, or fallback to generic ones
+        if not self.state.focus_areas:
+            self.state.focus_areas = self._get_generic_focus_areas()
         
-        current_focus = focus_areas[min(self.state.current_question_index, len(focus_areas) - 1)]
+        # Select focus area for current question
+        # If more questions than focus areas, cycle through or use the last one
+        focus_index = min(self.state.current_question_index, len(self.state.focus_areas) - 1)
+        current_focus = self.state.focus_areas[focus_index]
         
         # Build context from previous Q&A
         previous_context = ""
@@ -279,19 +397,32 @@ Provide a concise 3-4 sentence analysis."""
         
         prompt = f"""{self.examiner_personality}
 
-Document Analysis: {self.state.document_analysis}
+Document Type: {self.state.document_type}
 
 Document Content:
 {self.state.document_text[:2000]}...
 
 {previous_context}
 
-Generate ONE specific, insightful question focusing on {current_focus}
-The question should:
+Generate ONE examination question that tests the student's understanding of {current_focus}
+
+IMPORTANT RULES:
+- Ask about the PROJECT/TOPIC content, NOT about document formatting or metadata
+- Do NOT ask about student names, IDs, submission details, or page layout
+- Focus on the SUBJECT MATTER: concepts, methodology, design, implementation, etc.
+- The student should demonstrate they READ and UNDERSTOOD the content
 - Be clear and direct
-- Require thoughtful analysis
-- Relate specifically to the document content
-- Not repeat previous questions
+- Require thoughtful analysis based on the content
+
+Example GOOD questions:
+- "Explain the main objectives of the proposed system"
+- "What methodology is used and why is it appropriate?"
+- "Describe the key features and their benefits"
+
+Example BAD questions (NEVER ask these):
+- "What is the project ID?"
+- "Who submitted this document?"
+- "Analyze the adequacy of identifying information on Page 1"
 
 Respond with ONLY the question, no additional text."""
 
