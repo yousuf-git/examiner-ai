@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY pdf_handler.py .
 COPY examiner_logic.py .
 COPY app.py .
-COPY .env.example .env
+# COPY .env.example .env
 
 # Create a non-root user for security
 RUN useradd -m -u 1000 examiner && \
